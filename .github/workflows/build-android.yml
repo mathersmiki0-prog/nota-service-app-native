@@ -67,7 +67,8 @@ jobs:
   release:
     needs: build
     runs-on: ubuntu-latest
-    if: secrets.KEYSTORE_BASE64 != ''
+    # Perbaikan: gunakan ekspresi ${ { ... } } untuk mengakses secrets di if
+    if: ${{ secrets.KEYSTORE_BASE64 != '' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
