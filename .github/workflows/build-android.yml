@@ -75,41 +75,42 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Check keystore secret
-        # Jika KEYSTORE_BASE64 kosong / tidak ada, berhenti lebih awal (skipping release)
-        if: ${{ secrets.KEYSTORE_BASE64 == '' }}
-        run: |
-          echo "No KEYSTORE_BASE64 secret found — skipping release build."
-          exit 0
-
-      - name: Decode keystore secret
-        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
-        run: |
-          echo "$KEYSTORE_BASE64" | base64 --decode > android/app/release.keystore
+      - name: Build signed Release (only if keystore secret provided)
+        id: signed_build
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-
-      - name: Create keystore properties (for Gradle signing)
-        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
+          # If KEYSTORE_BASE64 is not set or empty, skip signed release gracefully
+          if [ -z "${KEYSTORE_BASE64}" ]; then
+            echo "KEYSTORE_BASE64 not set — skipping signed release build."
+            exit 0
+          fi
+
+          set -euo pipefail
+          mkdir -p android/app
+          echo "$KEYSTORE_BASE64" | base64 --decode > android/app/release.keystore
+
           cat > android/keystore.properties <<EOF
           storeFile=release.keystore
-          storePassword=${{ secrets.KEYSTORE_PASSWORD }}
-          keyAlias=${{ secrets.KEY_ALIAS }}
-          keyPassword=${{ secrets.KEY_PASSWORD }}
+          storePassword=${KEYSTORE_PASSWORD}
+          keyAlias=${KEY_ALIAS}
+          keyPassword=${KEY_PASSWORD}
           EOF
 
-      - name: Make gradlew executable
-        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
-        run: chmod +x android/gradlew
-
-      - name: Build Release APK
-        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
-        working-directory: android
-        run: ./gradlew assembleRelease --no-daemon
+          # ensure gradlew exists and is executable
+          if [ -f android/gradlew ]; then
+            chmod +x android/gradlew
+            (cd android && ./gradlew assembleRelease --no-daemon)
+          else
+            echo "android/gradlew not found; make sure 'npx cap sync android' produced the android project."
+            exit 1
+          fi
 
       - name: Upload Release APK artifact
-        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
+        if: steps.signed_build.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: app-release
