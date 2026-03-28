@@ -1,0 +1,9 @@
+node_modules/
+android/.gradle/
+android/.idea/
+android/.cxx/
+android/local.properties
+android/keystore.properties
+www/node_modules/
+*.log
+.DS_Store
