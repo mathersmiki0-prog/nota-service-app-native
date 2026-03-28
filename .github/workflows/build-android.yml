@@ -67,19 +67,30 @@ jobs:
   release:
     needs: build
     runs-on: ubuntu-latest
-    # Perbaikan: gunakan ekspresi ${ { ... } } untuk mengakses secrets di if
-    if: ${{ secrets.KEYSTORE_BASE64 != '' }}
+    defaults:
+      run:
+        shell: bash
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Check keystore secret
+        # Jika KEYSTORE_BASE64 kosong / tidak ada, berhenti lebih awal (skipping release)
+        if: ${{ secrets.KEYSTORE_BASE64 == '' }}
+        run: |
+          echo "No KEYSTORE_BASE64 secret found — skipping release build."
+          exit 0
+
       - name: Decode keystore secret
+        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
         run: |
           echo "$KEYSTORE_BASE64" | base64 --decode > android/app/release.keystore
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
 
       - name: Create keystore properties (for Gradle signing)
+        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
         run: |
           cat > android/keystore.properties <<EOF
           storeFile=release.keystore
@@ -89,13 +100,16 @@ jobs:
           EOF
 
       - name: Make gradlew executable
+        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
         run: chmod +x android/gradlew
 
       - name: Build Release APK
+        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
         working-directory: android
         run: ./gradlew assembleRelease --no-daemon
 
       - name: Upload Release APK artifact
+        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
         uses: actions/upload-artifact@v4
         with:
           name: app-release
