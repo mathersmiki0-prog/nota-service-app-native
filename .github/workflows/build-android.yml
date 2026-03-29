@@ -1,131 +1,163 @@
-name: Build Android Debug APK
+name: Build Android APK
 
 on:
   push:
-    branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
-  workflow_dispatch:
+    branches: [ main ]
+  workflow_dispatch: {}
+
+env:
+  NODE_VERSION: '18'
+  ANDROID_API_LEVEL: 33
+  BUILD_TOOLS: '33.0.2'
+  ANDROID_SDK_ROOT: ${{ env.HOME }}/Android/Sdk
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    
+    defaults:
+      run:
+        shell: bash
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: ${{ env.NODE_VERSION }}
 
-      # ==========================================
-      # GANTI npm ci dengan npm install
-      # ==========================================
-      - name: Install dependencies
+      - name: Install NPM dependencies
+        run: npm ci
+
+      - name: Copy web libs into www
         run: |
-          npm install
-          npm install @capacitor/android
+          mkdir -p www/libs
+          cp node_modules/html2canvas/dist/html2canvas.min.js www/libs/ 2>/dev/null || true
+          cp node_modules/jspdf/dist/jspdf.umd.min.js www/libs/ 2>/dev/null || true
+          cp node_modules/esc-pos-encoder/dist/esc-pos-encoder.min.js www/libs/ 2>/dev/null || true
 
-      - name: Build web assets
-        run: npm run build
-
-      - name: Add Android platform
-        run: npx cap add android
-
-      - name: Sync Capacitor with Android
+      - name: Sync Capacitor Android
         run: npx cap sync android
 
-      - name: Setup Android permissions
-        run: |
-          MANIFEST="android/app/src/main/AndroidManifest.xml"
-          
-          for i in {1..10}; do
-            if [ -f "$MANIFEST" ]; then
-              echo "✅ Manifest ditemukan setelah $i detik"
-              break
-            fi
-            sleep 1
-          done
-          
-          if [ ! -f "$MANIFEST" ]; then
-            echo "❌ AndroidManifest.xml tidak ditemukan!"
-            find android -name "*.xml" 2>/dev/null | head -5
-            exit 1
-          fi
-          
-          cp "$MANIFEST" "$MANIFEST.bak"
-          
-          add_permission() {
-            local perm="$1"
-            if ! grep -q "android:name=\"$perm\"" "$MANIFEST"; then
-              sed -i "/<\/manifest>/i\    <uses-permission android:name=\"$perm\" />" "$MANIFEST"
-              echo "✅ + $perm"
-            else
-              echo "ℹ️  = $perm (sudah ada)"
-            fi
-          }
-          
-          add_permission_limited() {
-            local perm="$1"
-            local maxsdk="$2"
-            if ! grep -q "android:name=\"$perm\"" "$MANIFEST"; then
-              sed -i "/<\/manifest>/i\    <uses-permission android:name=\"$perm\" android:maxSdkVersion=\"$maxsdk\" />" "$MANIFEST"
-              echo "✅ + $perm (maxSdk: $maxsdk)"
-            else
-              echo "ℹ️  = $perm (sudah ada)"
-            fi
-          }
-          
-          echo "🔧 Menambahkan permissions..."
-          
-          add_permission "android.permission.READ_CONTACTS"
-          add_permission "android.permission.WRITE_CONTACTS"
-          add_permission "android.permission.CAMERA"
-          add_permission_limited "android.permission.BLUETOOTH" "30"
-          add_permission_limited "android.permission.BLUETOOTH_ADMIN" "30"
-          add_permission "android.permission.BLUETOOTH_SCAN"
-          add_permission "android.permission.BLUETOOTH_CONNECT"
-          add_permission "android.permission.BLUETOOTH_ADVERTISE"
-          add_permission "android.permission.ACCESS_FINE_LOCATION"
-          add_permission "android.permission.ACCESS_COARSE_LOCATION"
-          add_permission "android.permission.INTERNET"
-          add_permission "android.permission.ACCESS_NETWORK_STATE"
-
-      - name: Setup Java
+      - name: Set up Java (JDK 11)
         uses: actions/setup-java@v4
         with:
-          distribution: 'zulu'
-          java-version: '17'
+          distribution: 'temurin'
+          java-version: '11'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Ensure Android SDK & command-line tools + install platform/build-tools
+        run: |
+          set -euo pipefail
+          echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT}"
+          mkdir -p "${ANDROID_SDK_ROOT}"
 
-      - name: Grant execute permission for gradlew
-        run: chmod +x android/gradlew
+          # Try to find sdkmanager in PATH first
+          if command -v sdkmanager >/dev/null 2>&1; then
+            SDKMANAGER="$(command -v sdkmanager)"
+            echo "Found sdkmanager at: $SDKMANAGER"
+          else
+            # Try common locations
+            if [ -x "${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager" ]; then
+              SDKMANAGER="${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager"
+            elif [ -x "${ANDROID_SDK_ROOT}/tools/bin/sdkmanager" ]; then
+              SDKMANAGER="${ANDROID_SDK_ROOT}/tools/bin/sdkmanager"
+            else
+              echo "sdkmanager not found. Downloading Android command-line tools..."
+              CMDLINE_ZIP="${RUNNER_TEMP:-/tmp}/commandlinetools.zip"
+              # Official Google URL - may be updated by Google; this is a commonly used location.
+              curl -fSL "https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip" -o "$CMDLINE_ZIP"
+              mkdir -p "${ANDROID_SDK_ROOT}/cmdline-tools"
+              unzip -q "$CMDLINE_ZIP" -d "${ANDROID_SDK_ROOT}/cmdline-tools/temp"
+              # The zip contains a 'cmdline-tools' subfolder; move inside to 'latest'
+              mkdir -p "${ANDROID_SDK_ROOT}/cmdline-tools/latest"
+              # Move content (some zips contain a top-level 'cmdline-tools' dir)
+              if [ -d "${ANDROID_SDK_ROOT}/cmdline-tools/temp/cmdline-tools" ]; then
+                mv "${ANDROID_SDK_ROOT}/cmdline-tools/temp/cmdline-tools/"* "${ANDROID_SDK_ROOT}/cmdline-tools/latest/"
+              else
+                mv "${ANDROID_SDK_ROOT}/cmdline-tools/temp/"* "${ANDROID_SDK_ROOT}/cmdline-tools/latest/"
+              fi
+              rm -rf "${ANDROID_SDK_ROOT}/cmdline-tools/temp" "$CMDLINE_ZIP"
+              SDKMANAGER="${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager"
+            fi
+          fi
+
+          echo "Using sdkmanager: $SDKMANAGER"
+
+          # Ensure platform-tools and required components are installed
+          export PATH="${ANDROID_SDK_ROOT}/platform-tools:${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin:${PATH}"
+
+          # Accept licenses non-interactively
+          if [ -x "$SDKMANAGER" ]; then
+            yes | "$SDKMANAGER" --licenses || true
+            "$SDKMANAGER" "platform-tools" "platforms;android-${ANDROID_API_LEVEL}" "build-tools;${BUILD_TOOLS}" || true
+          else
+            echo "sdkmanager not executable at $SDKMANAGER"
+          fi
+
+      - name: Make gradlew executable
+        run: |
+          if [ -f android/gradlew ]; then
+            chmod +x android/gradlew
+          fi
 
       - name: Build Debug APK
-        run: |
-          cd android
-          ./gradlew assembleDebug --stacktrace
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
 
-      - name: Verify APK exists
+      - name: Upload Debug APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Prepare and build signed Release (if keystore secret provided)
+        id: signed_build
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          APK_PATH="android/app/build/outputs/apk/debug/app-debug.apk"
-          if [ -f "$APK_PATH" ]; then
-            echo "✅ APK ditemukan: $APK_PATH"
-            ls -lh "$APK_PATH"
+          set -euo pipefail
+          # If KEYSTORE_BASE64 is empty/unset, skip signed build gracefully
+          if [ -z "${KEYSTORE_BASE64:-}" ]; then
+            echo "KEYSTORE_BASE64 not set — skipping signed release build."
+            exit 0
+          fi
+
+          mkdir -p android/app
+          echo "$KEYSTORE_BASE64" | base64 --decode > android/app/release.keystore
+
+          cat > android/keystore.properties <<EOF
+          storeFile=release.keystore
+          storePassword=${KEYSTORE_PASSWORD}
+          keyAlias=${KEY_ALIAS}
+          keyPassword=${KEY_PASSWORD}
+          EOF
+
+          if [ -f android/gradlew ]; then
+            chmod +x android/gradlew
+            (cd android && ./gradlew assembleRelease --no-daemon)
           else
-            echo "❌ APK tidak ditemukan!"
-            find android -name "*.apk" 2>/dev/null
+            echo "android/gradlew not found; ensure 'npx cap sync android' produced the android project."
             exit 1
           fi
 
-      - name: Upload Debug APK
+      - name: Upload Release APK artifact
+        if: steps.signed_build.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
-          retention-days: 30
+          name: app-release
+          path: android/app/build/outputs/apk/release/app-release.apk
