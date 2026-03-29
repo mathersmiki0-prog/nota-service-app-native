@@ -2,8 +2,19 @@
   "appId": "com.mathersmiki0.notaservice",
   "appName": "Nota Service HP",
   "webDir": "www",
+  "bundledWebRuntime": false,
   "server": {
-    "androidScheme": "https"
+    "androidScheme": "https",
+    "cleartext": true
+  },
+  "android": {
+    "buildOptions": {
+      "keystorePath": "release.keystore",
+      "keystoreAlias": "release",
+      "minSdkVersion": 22,
+      "targetSdkVersion": 34,
+      "compileSdkVersion": 34
+    }
   },
   "plugins": {
     "Camera": {
@@ -24,7 +35,8 @@
       "android": {
         "permissions": [
           "android.permission.READ_CONTACTS",
-          "android.permission.WRITE_CONTACTS"
+          "android.permission.WRITE_CONTACTS",
+          "android.permission.GET_ACCOUNTS"
         ]
       }
     },
@@ -32,7 +44,8 @@
       "android": {
         "permissions": [
           "android.permission.READ_EXTERNAL_STORAGE",
-          "android.permission.WRITE_EXTERNAL_STORAGE"
+          "android.permission.WRITE_EXTERNAL_STORAGE",
+          "android.permission.READ_MEDIA_IMAGES"
         ]
       }
     }
