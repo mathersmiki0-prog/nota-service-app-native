@@ -5,9 +5,10 @@
   "main": "index.html",
   "scripts": {
     "build": "echo 'No build step needed'",
-    "ci": "npm ci",
+    "postinstall": "npx cap sync android",
     "android:prepare": "npx cap sync android",
-    "android:build": "npx cap sync android && cd android && ./gradlew assembleDebug"
+    "android:build": "npx cap sync android && cd android && ./gradlew assembleDebug",
+    "android:open": "npx cap open android"
   },
   "dependencies": {
     "@capacitor/android": "^6.0.0",
