@@ -25,7 +25,6 @@ jobs:
         run: |
           echo "Current directory: $(pwd)"
           ls -la
-          ls -la package.json 2>/dev/null || echo "package.json NOT FOUND"
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -40,12 +39,24 @@ jobs:
           fi
           npm install
 
-      - name: Copy web libs into www
+      - name: Prepare www folder
         run: |
+          mkdir -p www
+          # Copy file web ke www jika ada di root
+          cp *.html www/ 2>/dev/null || true
+          cp *.js www/ 2>/dev/null || true
+          cp *.css www/ 2>/dev/null || true
+          # Copy folder www jika sudah ada
+          if [ -d "www_backup" ]; then
+            cp -r www_backup/* www/ 2>/dev/null || true
+          fi
+          # Setup libs
           mkdir -p www/libs
           cp node_modules/html2canvas/dist/html2canvas.min.js www/libs/ 2>/dev/null || true
           cp node_modules/jspdf/dist/jspdf.umd.min.js www/libs/ 2>/dev/null || true
           cp node_modules/esc-pos-encoder/dist/esc-pos-encoder.min.js www/libs/ 2>/dev/null || true
+          echo "www folder contents:"
+          ls -la www/
 
       - name: Add Android platform (if not exists)
         run: |
@@ -54,7 +65,7 @@ jobs:
             npx cap add android
           else
             echo "Android platform already exists"
-          fi
+            fi
 
       - name: Sync Capacitor Android
         run: npx cap sync android
@@ -143,8 +154,12 @@ jobs:
       - name: Install NPM dependencies
         run: npm install
 
-      - name: Copy web libs into www
+      - name: Prepare www folder
         run: |
+          mkdir -p www
+          cp *.html www/ 2>/dev/null || true
+          cp *.js www/ 2>/dev/null || true
+          cp *.css www/ 2>/dev/null || true
           mkdir -p www/libs
           cp node_modules/html2canvas/dist/html2canvas.min.js www/libs/ 2>/dev/null || true
           cp node_modules/jspdf/dist/jspdf.umd.min.js www/libs/ 2>/dev/null || true
