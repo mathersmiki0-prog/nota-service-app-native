@@ -1,7 +1,7 @@
 {
   "appId": "com.mathersmiki0.notaservice",
   "appName": "Nota Service HP",
-  "webDir": ".",
+  "webDir": "www",
   "server": {
     "androidScheme": "https"
   },
