@@ -27,7 +27,7 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Install NPM dependencies
-        run: npm ci
+        run: npm install
 
       - name: Copy web libs into www
         run: |
@@ -129,7 +129,7 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Install NPM dependencies
-        run: npm ci
+        run: npm install
 
       - name: Copy web libs into www
         run: |
